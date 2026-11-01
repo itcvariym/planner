@@ -71,6 +71,7 @@ h1 .of{color:var(--muted);font-weight:600;font-size:1.5rem}
 .ch.win{border-color:var(--accent)}
 .link{color:var(--accent);font-size:.7rem;font-weight:700;white-space:nowrap}
 .link.mute{color:var(--muted);font-weight:600}
+.install{padding:6px 12px;border-radius:999px;background:var(--accent);color:var(--on-accent);font-size:.66rem;font-weight:700;animation:pop .6s var(--ease) .4s both}
 .ch-links{display:grid;justify-items:end;gap:6px}
 .alarm{padding:2px 8px;border-radius:999px;border:1px solid var(--accent);color:var(--accent);font-size:.62rem;font-weight:700;background:color-mix(in srgb,var(--card) 70%,transparent)}
 .warn{text-align:center;padding:4px 4px 18px}
@@ -493,7 +494,7 @@ function renderToday() {
 
   return `
   <section class="panel">
-    <div class="top rise">${ICON.logo}</div>
+    <div class="top rise">${ICON.logo}${installEvt && !isStandalone() ? '<button class="install" data-act="install">⬇ Установить приложение</button>' : ''}</div>
     <h1 class="wd swap"><span class="w" style="--w:0">${WEEKDAYS[wd(sel)]}</span></h1>
     <div class="dateline rise swap">
       <label class="datebig" title="Выбрать дату">${longDate(sel)}
@@ -722,6 +723,15 @@ function renderStyle() {
   </section>
 
   <section class="panel">
+    <h2>Приложение</h2>
+    <p class="sub">${isStandalone() ? 'Планер установлен как приложение ✓ Работает и без интернета.'
+      : installEvt ? 'Поставь планер на главный экран — он будет открываться отдельным приложением и работать без интернета.'
+      : isIOS ? 'На iPhone: открой сайт в Safari → кнопка «Поделиться» → «На экран «Домой»». После этого планер работает и без интернета.'
+      : 'Открой сайт в Chrome → меню ⋮ → «Установить приложение» или «Добавить на главный экран». После этого планер работает и без интернета.'}</p>
+    ${installEvt && !isStandalone() ? '<button class="btn" data-act="install">⬇ Установить приложение</button>' : ''}
+  </section>
+
+  <section class="panel">
     <h2>Сброс</h2>
     <button class="btn ghost" data-act="resetStyle">Вернуть стиль по умолчанию</button>
     <div style="height:8px"></div>
@@ -771,6 +781,24 @@ document.fonts?.ready.then(replaceTabInd);
 
 // ----- будильник: на Android открываем «Часы» с уже заполненным временем подъёма -----
 const isAndroid = /Android/i.test(navigator.userAgent);
+const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+
+// ----- установка как отдельного приложения -----
+let installEvt = null;
+const isStandalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  installEvt = e;
+  if (!sheetCtx && (view === 'today' || view === 'style')) render();
+});
+addEventListener('appinstalled', () => { installEvt = null; toast('Готово! Планер на главном экране'); render(); });
+async function install() {
+  if (!installEvt) return;
+  installEvt.prompt();
+  await installEvt.userChoice;
+  installEvt = null;
+  render();
+}
 const isWake = i => pickPic(i) === 'wake';
 function setAlarm(time, label) {
   if (!isAndroid) { toast('Будильник ставится автоматически только на Android'); return false; }
@@ -935,6 +963,7 @@ document.addEventListener('click', e => {
       break;
     }
     case 'chStop': askStopChallenge(); break;
+    case 'install': install(); break;
     case 'confirmLeave': { const fn = sheetCtx?.confirm; closeSheet(); fn?.(); break; }
     case 'alarm': {
       const it = S.plans.flatMap(p => p.items).find(i => i.id === id);
@@ -1034,6 +1063,11 @@ document.addEventListener('keydown', e => {
 });
 
 render('enter');
+
+// офлайн-режим: кэшируем все файлы планера (работает только на сайте по https, не с диска)
+if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}
 </script>
 </body>
 </html>
